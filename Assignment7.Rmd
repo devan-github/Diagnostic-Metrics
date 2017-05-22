@@ -1,0 +1,212 @@
+---
+title: "Diagnostic Metrics"
+author: "Devan Goto"
+date: "11/30/2016"
+output: html_document
+---
+
+In the following assignment you will be looking at data from an one level of an online geography tutoring system used by 5th grade students. The game involves a pre-test of geography knowledge (pre.test), a series of assignments for which you have the average score (av.assignment.score),  the number of messages sent by each student to other students about the assignments (messages), the number of forum posts students posted asking questions about the assignment (forum.posts), a post test at the end of the level (post.test) and whether or not the system allowed the students to go on to the next level (level.up).  
+
+#Upload data
+```{r}
+
+D1<-read.table("online.data.csv",header=TRUE,sep=",")
+
+#Make Data Numeric
+
+D2<-D1
+
+No = 0
+Yes = 1
+D2$level.up<-ifelse(D2$level.up == "no",0,1)
+
+#Null id Variable
+
+D3<-D2
+D3$id<-NULL
+
+```
+
+#Visualization 
+```{r}
+#Start by creating histograms of the distributions for all variables (#HINT: look up "facet" in the ggplot documentation)
+
+library(tidyr)
+
+#Transform Wide Data into Long Data: Needs long data to use facet
+
+D4<-D3
+
+data_long <- gather(D4, condition, measurement, post.test.score:level.up, factor_key=TRUE)
+
+library(ggplot2)
+
+hist1 = ggplot(data_long,aes(x=measurement)) + geom_histogram(binwidth = 0.1) + facet_wrap(~condition, scales = "free")
+
+
+#Then visualize the relationships between variables
+
+library(corrplot)
+
+pairs(D4)
+
+corrplot(cor1, order="AOE", method="circle", tl.pos="lt", type="upper", tl.col="black", tl.cex=0.6, tl.srt=45, addCoef.col="black", addCoefasPercent = TRUE, sig.level=0.50, insig = "blank")
+
+#Try to capture an intution about the data and the relationships
+
+#I think this chart shows us the relationships between variables. The larger the number is to one another the closer the relationship.  Based on the graph assignment score is the most indicitive of leveling up, with post test score and messages coming in second and third place respectively.  This makes sense, if you score well on assignments you should level up, just as if you score well on a post test.  The messages may indicate that they are being used effectively to learn course content
+
+
+```
+#Classification tree
+```{r}
+#Create a classification tree that predicts whether a student "levels up" in the online course using three variables of your choice (As we did last time, set all controls to their minimums)
+
+library(rpart)
+
+c.tree1 <- rpart(level.up ~ forum.posts + pre.test.score + post.test.score, method="class" , data = D4, control=rpart.control(minsplit=1,minbucket=1,cp=0.001))
+
+printcp(c.tree1)
+
+#Plot and generate a CP table for your tree 
+
+plot(c.tree1)
+text(c.tree1)
+
+#Generate a probability value that represents the probability that a student levels up based your classification tree 
+
+D1$pred <- predict(rp, type = "prob")[,2]#Last class we used type = "class" which predicted the classification for us, this time we are using type = "prob" to see the probability that our classififcation is based on.
+
+D4$prob <- predict(c.tree1, type = "prob")[,2]
+
+#Now you can generate the ROC curve for your model. You will need to install the package ROCR to do this.
+
+library(ROCR)
+
+#Plot the curve
+pred.detail <- prediction(D1$pred, D1$level.up) (EXAMPLE)
+
+pred.detail <- prediction(D4$prob, D4$level.up) 
+
+plot(performance(pred.detail, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+
+#Calculate the Area Under the Curve
+unlist(slot(performance(Pred2,"auc"), "y.values"))#Unlist liberates the AUC value from the "performance" object created by ROCR
+
+prediction<-prediction(D4$prob, D4$level.up)
+
+unlist(slot(performance(prediction,"auc"), "y.values"))
+[1] 0.9972292
+#I believe this means that the three variables I chose were very indicitive of leveling up (higher the auc the higher the accuracy), I predit that my auc value will be lower when I repeat the process.  
+
+#Now repeat this process, but using the variables you did not use for the previous model and compare the plots & results of your two models. Which one do you think was the better model? Why?
+
+c.tree2 <- rpart(level.up ~ messages + av.assignment.score, method="class" , data = D4, control=rpart.control(minsplit=1,minbucket=1,cp=0.001))
+
+printcp(c.tree2)
+
+plot(c.tree2)
+text(c.tree2)
+
+D4$prob2 <- predict(c.tree2, type = "prob")[,2]
+
+pred.detail2 <- prediction(D4$prob2, D4$level.up) 
+
+plot(performance(pred.detail2, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+
+prediction2<-prediction(D4$prob2,D4$level.up)
+unlist(slot(performance(prediction2,"auc"), "y.values"))
+[1] 0.9958604
+#These are both favorable results.  This means that you could actually use both, the results that I got in both are equivalent to what the medical field uses.  Although the first one has a higher auc, I'd honestly use both.  I think the auc values are high because I seperated them in a way that would make them this way.  What I mean is, if I would've chose the two variables that correlate (forum posts and pre test scores) the least to leveling up, I probably would have recieved a somewhat lower auc.  Although I do believe that the auc still would have been high.  Since my first model had a higher auc I would say that is the better model. 
+
+```
+#Thresholds
+```{r}
+#Look at the ROC plot for your first model. Based on this plot choose a probability threshold that balances capturing the most correct predictions against false positives. Then generate a new variable in your data set that classifies each student according to your chosen threshold.
+
+threshold.pred1 <- 
+
+D4$threshold.pred1 <- ifelse(D4$prob>.14, 1, 0)
+
+table1<-table(D4$level.up,D4$threshold.pred1)
+
+table1
+   
+      0   1
+  0 571  29
+  1   0 400
+
+#Now generate three diagnostics:
+
+D4$accuracy.model1 <-(571+400)/(1000)
+= 0.971
+
+D4$precision.model1 <- (400)/(400+0)
+= 1.00
+
+D4$recall.model1 <- (400)/(400+29)
+= 0.932
+
+#Finally, calculate Kappa for your model according to:
+
+#First generate the table of comparisons
+table1 <- table(D1$level.up, D1$threshold.pred1)
+
+#Convert to matrix
+matrix1 <- as.matrix(table1)
+
+#Calculate kappa
+kappa(matrix1, exact = TRUE)/kappa(matrix1)
+
+1.103612
+
+#Now choose a different threshold value and repeat these diagnostics. 
+
+#This time I will use a much higher threshold.  Hopefully this will yield different results.  
+
+D4$threshold.pred2 <- ifelse(D4$prob>.948, 1, 0)
+table2<-table(D4$level.up,D4$threshold.pred2)
+table2
+   
+      0   1
+  0 597   3
+  1  84 316
+
+#Now generate three diagnostics:
+  
+D4$accuracy.model2 <-(597+316)/(1000)
+= 0.913
+
+D4$precision.model2 <- (316)/(316+84)
+= 0.79
+
+D4$recall.model2 <- (316)/(316+3)
+= 0.991
+  
+matrix2 <- as.matrix(table2)
+
+kappa(matrix2, exact = TRUE)/kappa(matrix2)
+=1.125014
+
+#Used the package suggested by Dr. Lang 
+
+ibrary(irr)
+
+#kappa2(D1[,c(x,y)], "unweighted")
+#Where “x” and “y” are the column numbers of your observed (level up) and predicted variables (threshold predict)
+
+#Threshold 1
+kappa2(D4[,c(6,9)], "unweighted")
+=0.94
+
+#Threshold 2
+kappa2(D4[,c(6,10)], "unweighted")
+=0.812
+
+#What conclusions can you draw about your two thresholds? 
+
+#I used two thresholds at opposite ends of the spectrum so it's hard to make clear conclusions. By increasing the threshold accuracy decreased, precision decreased, and recall increased.  This resulted in Kappa lowering by .128.  This shows that the reliability of the data went down as a result of this threshold.  I think this is because the threshold took too many values with it.  By decreasing the total number of values, it may affect Kappa, I presume this also depends on the types of value the thresholds delete.  I would like to also say that although Kappa decreased,0.812 is still a good Kappa and should be considered.  
+
+```
